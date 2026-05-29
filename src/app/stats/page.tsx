@@ -197,7 +197,7 @@ export default function StatsPage() {
   const weekDiff = weekTotal - prevWeekTotal
 
   return (
-    <div className="flex flex-col h-full px-5 pt-6 pb-24 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col min-h-full px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] space-y-6 max-w-md mx-auto">
       <header>
         <h1 className="text-2xl font-bold text-zinc-50">Statistics</h1>
         <p className="text-zinc-500 text-sm mt-0.5">Your drinking insights</p>

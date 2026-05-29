@@ -191,7 +191,7 @@ export default function Home() {
   const todayDrinks = consumptions.reduce((total, log) => total + (log.quantity || 1), 0)
 
   return (
-    <div className="flex flex-col h-full px-5 pt-6 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col min-h-full px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] space-y-6 max-w-md mx-auto">
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
@@ -260,7 +260,7 @@ export default function Home() {
       />
 
       {/* Today's History */}
-      <section className="space-y-3 pb-28">
+      <section className="space-y-3">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-zinc-600" />
           <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">History</h2>

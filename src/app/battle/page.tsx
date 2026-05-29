@@ -400,7 +400,7 @@ export default function BattlePage() {
   const isCreator = activeBattle?.created_by === userId
 
   return (
-    <div className="flex flex-col h-full px-5 pt-6 pb-28 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col min-h-full px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] space-y-6 max-w-md mx-auto">
       <header className="flex items-center gap-2.5">
         <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-300/10 border border-amber-500/20">
           <Swords className="w-5 h-5 text-amber-400" />
@@ -704,7 +704,7 @@ function BattleArena({
                     contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}
                     labelStyle={{ color: '#a1a1aa' }}
                     labelFormatter={(v) => new Date(v as number).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    formatter={(value: number, key) => {
+                    formatter={(value, key) => {
                       const p = participants.find(pp => pp.user_id === key)
                       return [`${Number(value).toFixed(1)} units`, nameOf(p?.profile)]
                     }}

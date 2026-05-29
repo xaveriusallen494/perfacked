@@ -47,7 +47,7 @@ export default function RootLayout({
       >
         <Providers>
           <div className="flex flex-col h-[100dvh] overflow-hidden">
-            <main className="flex-1 overflow-y-auto pt-safe pb-[calc(env(safe-area-inset-bottom)+3.5rem)]">
+            <main className="flex-1 overflow-y-auto pt-safe">
               {children}
             </main>
             <BottomNav />

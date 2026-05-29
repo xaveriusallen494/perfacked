@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, LogOut, Save, Calendar, Camera } from 'lucide-react'
+import { Loader2, LogOut, Save, Calendar, Camera, Users, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { v4 as uuidv4 } from 'uuid'
 import { toast } from 'sonner'
@@ -222,7 +223,7 @@ export default function ProfilePage() {
   })
 
   return (
-    <div className="flex flex-col h-full px-5 pt-6 pb-24 space-y-6 max-w-md mx-auto">
+    <div className="flex flex-col min-h-full px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] space-y-6 max-w-md mx-auto">
       <header>
         <h1 className="text-2xl font-bold text-zinc-50">Profile</h1>
       </header>
@@ -262,11 +263,29 @@ export default function ProfilePage() {
           <p className="text-2xl font-bold text-zinc-50 tabular-nums">{totalUnits}</p>
           <p className="text-xs text-zinc-500 mt-0.5">total units</p>
         </div>
-        <div className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-4 text-center">
+        <Link
+          href="/profile/friends"
+          className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-4 text-center transition-colors hover:bg-zinc-800/60"
+        >
           <p className="text-2xl font-bold text-zinc-50 tabular-nums">{friendCount}</p>
           <p className="text-xs text-zinc-500 mt-0.5">friends</p>
-        </div>
+        </Link>
       </div>
+
+      {/* Manage friends */}
+      <Link
+        href="/profile/friends"
+        className="flex items-center gap-3 rounded-xl bg-zinc-900 border border-zinc-800/60 p-4 transition-colors hover:bg-zinc-800/60"
+      >
+        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800 text-zinc-300">
+          <Users className="w-4 h-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-zinc-100">Friends</p>
+          <p className="text-xs text-zinc-500">See your friends and add new ones</p>
+        </div>
+        <ChevronRight className="w-4 h-4 text-zinc-600" />
+      </Link>
 
       {/* Top drinks */}
       {topDrinks.length > 0 && (
