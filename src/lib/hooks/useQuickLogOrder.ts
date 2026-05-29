@@ -5,6 +5,56 @@ import type { DrinkType } from '@/lib/store/useSipStore'
 
 const STORAGE_KEY_PREFIX = 'siptrack:quick-log-order'
 
+/**
+ * Curated default order for the quick-log grid, by drink name.
+ * Used for any user who hasn't manually reordered their grid yet.
+ * Drinks not listed here are appended after these, in their DB order.
+ */
+const DEFAULT_ORDER = [
+  'Stella Artois 25cl',
+  'Stella Artois 50cl',
+  'Jupiler 25cl',
+  'Beer',
+  'Beer (Pint)',
+  'Stong Beer',
+  'Ouden Duiker',
+  'Fourchette',
+  'Aperol Spritz',
+  'Red Wine',
+  'White Wine',
+  'Rosé Wine',
+  'Shot (Vodka/Tequila)',
+  'Whiskey',
+  'Cocktail',
+  'Orval',
+  'Leffe Blond',
+  'Vedett IPA',
+  'La Chouffe',
+  'Kasteel Rouge',
+  'Kriek',
+]
+
+function normalizeName(name: string) {
+  return name.trim().toLowerCase()
+}
+
+/**
+ * Orders drinks by the curated DEFAULT_ORDER (matched by name).
+ * Any drinks not in the list keep their incoming (DB) order, appended at the end.
+ */
+function applyDefaultOrder(drinks: DrinkType[]): DrinkType[] {
+  const rank = new Map(DEFAULT_ORDER.map((name, i) => [normalizeName(name), i]))
+  return drinks
+    .map((drink, i) => ({ drink, i }))
+    .sort((a, b) => {
+      const ra = rank.get(normalizeName(a.drink.name)) ?? Infinity
+      const rb = rank.get(normalizeName(b.drink.name)) ?? Infinity
+      if (ra !== rb) return ra - rb
+      return a.i - b.i
+    })
+    .map(({ drink }) => drink)
+}
+
 function getStorageKey(userId: string | null) {
   return userId ? `${STORAGE_KEY_PREFIX}:${userId}` : null
 }
@@ -60,7 +110,7 @@ export function useQuickLogOrder(drinkTypes: DrinkType[], userId: string | null)
     if (stored && stored.length > 0) {
       setOrderedDrinks(applyOrder(drinkTypes, stored))
     } else {
-      setOrderedDrinks(drinkTypes)
+      setOrderedDrinks(applyDefaultOrder(drinkTypes))
     }
   }, [drinkTypes, userId])
 

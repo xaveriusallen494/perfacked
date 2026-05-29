@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -30,8 +30,7 @@ export default function ManageFriendsPage() {
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Profile[]>([])
-  const [searching, setSearching] = useState(false)
+  const [allUsers, setAllUsers] = useState<Profile[]>([])
 
   const supabase = createClient()
 
@@ -79,33 +78,29 @@ export default function ManageFriendsPage() {
       setIncoming(incomingReqs)
       setPendingIds(pending)
       setFriendIds(friendSet)
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .neq('id', user.id)
+        .order('display_name', { nullsFirst: false })
+        .limit(200)
+
+      setAllUsers((profiles || []) as Profile[])
       setLoading(false)
     }
     init()
   }, [])
 
-  useEffect(() => {
-    const q = searchQuery.trim()
-    if (!q) {
-      setSearchResults([])
-      setSearching(false)
-      return
-    }
-
-    setSearching(true)
-    const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, username, display_name, avatar_url')
-        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
-        .limit(15)
-
-      setSearchResults((data || []).filter(p => p.id !== userId) as Profile[])
-      setSearching(false)
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [searchQuery, userId, supabase])
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return allUsers
+    return allUsers.filter(
+      p =>
+        p.username?.toLowerCase().includes(q) ||
+        p.display_name?.toLowerCase().includes(q),
+    )
+  }, [allUsers, searchQuery])
 
   const sendFriendRequest = async (target: Profile) => {
     if (!userId) return
@@ -162,8 +157,6 @@ export default function ManageFriendsPage() {
     toast.success('Friend removed')
   }
 
-  const isSearching = searchQuery.trim().length > 0
-
   return (
     <div className="flex flex-col min-h-full px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] space-y-6 max-w-md mx-auto">
       <header className="flex items-center gap-3">
@@ -194,64 +187,6 @@ export default function ManageFriendsPage() {
         <div className="py-12 flex justify-center">
           <Loader2 className="w-6 h-6 text-zinc-500 animate-spin" />
         </div>
-      ) : isSearching ? (
-        <section className="space-y-2">
-          {searching ? (
-            <div className="py-8 flex justify-center">
-              <Loader2 className="w-5 h-5 text-zinc-600 animate-spin" />
-            </div>
-          ) : searchResults.length === 0 ? (
-            <div className="py-12 text-center space-y-2">
-              <Search className="w-10 h-10 text-zinc-700 mx-auto" />
-              <p className="text-sm text-zinc-500">No users found</p>
-              <p className="text-xs text-zinc-600">Try a different username or name</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {searchResults.map((person) => {
-                const isFriend = friendIds.has(person.id)
-                const isPending = pendingIds.has(person.id)
-                return (
-                  <motion.div
-                    key={person.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800/60"
-                  >
-                    <Avatar className="w-9 h-9 border border-zinc-800">
-                      <AvatarImage src={person.avatar_url || undefined} />
-                      <AvatarFallback className="bg-zinc-800 text-zinc-400 text-xs">
-                        {(person.display_name || person.username || '?').charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-zinc-200 truncate">
-                        {person.display_name || person.username || 'Unknown'}
-                      </p>
-                      {person.username && (
-                        <p className="text-xs text-zinc-600 truncate">@{person.username}</p>
-                      )}
-                    </div>
-                    {isFriend ? (
-                      <span className="flex items-center gap-1 text-xs text-zinc-500">
-                        <Check className="w-3.5 h-3.5" /> Friends
-                      </span>
-                    ) : isPending ? (
-                      <span className="text-xs text-zinc-500">Pending</span>
-                    ) : (
-                      <button
-                        onClick={() => sendFriendRequest(person)}
-                        className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-amber-500 text-zinc-950 text-sm font-medium active:scale-95 transition-transform"
-                      >
-                        <UserPlus className="w-4 h-4" /> Add
-                      </button>
-                    )}
-                  </motion.div>
-                )
-              })}
-            </div>
-          )}
-        </section>
       ) : (
         <>
           {/* Incoming requests */}
@@ -302,6 +237,68 @@ export default function ManageFriendsPage() {
               </div>
             </section>
           )}
+
+          {/* People (all users, narrowed by search) */}
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+              People <span className="text-zinc-600">({filteredUsers.length})</span>
+            </h2>
+            {filteredUsers.length === 0 ? (
+              <div className="py-12 text-center space-y-2">
+                <Search className="w-10 h-10 text-zinc-700 mx-auto" />
+                <p className="text-sm text-zinc-500">
+                  {searchQuery.trim() ? 'No users found' : 'No other users yet'}
+                </p>
+                {searchQuery.trim() && (
+                  <p className="text-xs text-zinc-600">Try a different username or name</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {filteredUsers.map((person) => {
+                  const isFriend = friendIds.has(person.id)
+                  const isPending = pendingIds.has(person.id)
+                  return (
+                    <motion.div
+                      key={person.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800/60"
+                    >
+                      <Avatar className="w-9 h-9 border border-zinc-800">
+                        <AvatarImage src={person.avatar_url || undefined} />
+                        <AvatarFallback className="bg-zinc-800 text-zinc-400 text-xs">
+                          {(person.display_name || person.username || '?').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-zinc-200 truncate">
+                          {person.display_name || person.username || 'Unknown'}
+                        </p>
+                        {person.username && (
+                          <p className="text-xs text-zinc-600 truncate">@{person.username}</p>
+                        )}
+                      </div>
+                      {isFriend ? (
+                        <span className="flex items-center gap-1 text-xs text-zinc-500">
+                          <Check className="w-3.5 h-3.5" /> Friends
+                        </span>
+                      ) : isPending ? (
+                        <span className="text-xs text-zinc-500">Pending</span>
+                      ) : (
+                        <button
+                          onClick={() => sendFriendRequest(person)}
+                          className="flex items-center gap-1.5 px-3 h-9 rounded-lg bg-amber-500 text-zinc-950 text-sm font-medium active:scale-95 transition-transform"
+                        >
+                          <UserPlus className="w-4 h-4" /> Add
+                        </button>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
 
           {/* Friends list */}
           <section className="space-y-2">
