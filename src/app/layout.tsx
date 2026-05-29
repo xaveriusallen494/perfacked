@@ -4,6 +4,7 @@ import "./globals.css";
 import Providers from "./providers";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +47,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-zinc-950 text-zinc-50 overflow-hidden`}
       >
         <Providers>
+          <ServiceWorkerRegister />
           <div className="flex flex-col h-[100dvh] overflow-hidden">
             <main className="flex-1 overflow-y-auto pt-safe">
               {children}

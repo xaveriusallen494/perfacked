@@ -1,14 +1,11 @@
 import type { NextConfig } from "next";
-import withPWAInit from "@ducanh2912/next-pwa";
-
-const withPWA = withPWAInit({
-  dest: "public",
-  disable: process.env.NODE_ENV === "development",
-});
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  turbopack: {}
+  turbopack: {
+    root: dirname(fileURLToPath(import.meta.url)),
+  },
 };
 
-export default withPWA(nextConfig);
+export default nextConfig;

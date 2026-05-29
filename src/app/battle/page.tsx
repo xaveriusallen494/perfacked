@@ -101,6 +101,50 @@ function buildScores(participants: Participant[], consumptions: BattleConsumptio
   return Array.from(map.values()).sort((a, b) => b.units - a.units || b.drinks - a.drinks)
 }
 
+type DrinkTally = {
+  name: string
+  icon: string
+  color: string
+  image_url?: string | null
+  count: number
+  units: number
+}
+
+// Per-participant tally of which drinks they logged, sorted by count desc.
+function buildBreakdown(consumptions: BattleConsumption[]): Map<string, DrinkTally[]> {
+  const byUser = new Map<string, Map<string, DrinkTally>>()
+  for (const c of consumptions) {
+    if (!c.drink_type) continue
+    let drinks = byUser.get(c.user_id)
+    if (!drinks) {
+      drinks = new Map()
+      byUser.set(c.user_id, drinks)
+    }
+    const qty = c.quantity || 1
+    const units = (c.drink_type.standard_units || 0) * qty
+    const existing = drinks.get(c.drink_type.name)
+    if (existing) {
+      existing.count += qty
+      existing.units += units
+    } else {
+      drinks.set(c.drink_type.name, {
+        name: c.drink_type.name,
+        icon: c.drink_type.icon,
+        color: c.drink_type.color,
+        image_url: c.drink_type.image_url,
+        count: qty,
+        units,
+      })
+    }
+  }
+
+  const result = new Map<string, DrinkTally[]>()
+  for (const [uid, drinks] of byUser) {
+    result.set(uid, Array.from(drinks.values()).sort((a, b) => b.count - a.count || b.units - a.units))
+  }
+  return result
+}
+
 function buildChartData(
   participants: Participant[],
   consumptions: BattleConsumption[],
@@ -462,6 +506,7 @@ export default function BattlePage() {
           scores={scores}
           chartData={chartData}
           participants={participants}
+          consumptions={battleConsumptions}
           drinkTypes={orderedDrinks}
           userId={userId}
           isCreator={!!isCreator}
@@ -638,12 +683,13 @@ function BattleSetup({
 // ----------------------------------------------------------------------------
 
 function BattleArena({
-  battle, scores, chartData, participants, drinkTypes, userId, isCreator, ending, now, onLog, onEnd,
+  battle, scores, chartData, participants, consumptions, drinkTypes, userId, isCreator, ending, now, onLog, onEnd,
 }: {
   battle: Battle
   scores: Score[]
   chartData: Record<string, number>[]
   participants: Participant[]
+  consumptions: BattleConsumption[]
   drinkTypes: DrinkType[]
   userId: string | null
   isCreator: boolean
@@ -656,6 +702,7 @@ function BattleArena({
   const totalUnits = scores.reduce((s, x) => s + x.units, 0)
   const leaderUnits = Math.max(...scores.map(s => s.units), 0)
   const startMs = new Date(battle.started_at).getTime()
+  const breakdown = useMemo(() => buildBreakdown(consumptions), [consumptions])
 
   return (
     <div className="space-y-6">
@@ -809,7 +856,7 @@ function BattleArena({
         {drinkTypes.length === 0 ? (
           <p className="text-sm text-zinc-600">No drinks available</p>
         ) : (
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             {drinkTypes.map((d) => (
               <button
                 key={d.id}
@@ -823,6 +870,9 @@ function BattleArena({
           </div>
         )}
       </section>
+
+      {/* Per-participant breakdown */}
+      <ParticipantBreakdown scores={scores} breakdown={breakdown} userId={userId} />
 
       {/* End battle */}
       {isCreator ? (
@@ -841,6 +891,69 @@ function BattleArena({
 }
 
 // ----------------------------------------------------------------------------
+// Per-participant drink breakdown
+// ----------------------------------------------------------------------------
+
+function ParticipantBreakdown({
+  scores, breakdown, userId,
+}: {
+  scores: Score[]
+  breakdown: Map<string, DrinkTally[]>
+  userId: string | null
+}) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">Who drank what</h2>
+      <div className="flex flex-col gap-2">
+        {scores.map((s) => {
+          const drinks = breakdown.get(s.user_id) ?? []
+          const isYou = s.user_id === userId
+          return (
+            <div key={s.user_id} className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-3 space-y-2.5">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-8 h-8 border-2" style={{ borderColor: s.color }}>
+                  <AvatarImage src={s.profile?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-zinc-800 text-zinc-400 text-xs">
+                    {nameOf(s.profile).charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-200 truncate">
+                    {nameOf(s.profile)}
+                    {isYou && <span className="text-xs text-zinc-600 ml-1.5">you</span>}
+                  </p>
+                  <p className="text-xs text-zinc-600">
+                    {s.drinks} drink{s.drinks !== 1 ? 's' : ''}
+                    <span className="mx-1.5 text-zinc-700">·</span>
+                    {s.units.toFixed(1)} units
+                  </p>
+                </div>
+              </div>
+              {drinks.length === 0 ? (
+                <p className="text-xs text-zinc-600 pl-11">Nothing logged yet</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 pl-11">
+                  {drinks.map((d) => (
+                    <span
+                      key={d.name}
+                      className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-lg bg-zinc-800/60 border border-zinc-800"
+                    >
+                      <DrinkIcon icon={d.icon} color={d.color} imageUrl={d.image_url} size={14} />
+                      <span className="text-xs text-zinc-300">{d.name}</span>
+                      <span className="text-xs font-semibold text-zinc-500 tabular-nums">×{d.count}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+// ----------------------------------------------------------------------------
 // Past battle overview modal
 // ----------------------------------------------------------------------------
 
@@ -855,6 +968,7 @@ function BattleOverview({
   onClose: () => void
 }) {
   const scores = useMemo(() => buildScores(participants, consumptions), [participants, consumptions])
+  const breakdown = useMemo(() => buildBreakdown(consumptions), [consumptions])
 
   const startTs = new Date(battle.started_at).getTime()
   const endTs = battle.ended_at ? new Date(battle.ended_at).getTime() : new Date(battle.created_at).getTime()
@@ -985,6 +1099,9 @@ function BattleOverview({
                 })}
               </div>
             </section>
+
+            {/* Per-participant breakdown */}
+            <ParticipantBreakdown scores={scores} breakdown={breakdown} userId={userId} />
 
             {/* Cumulative chart */}
             {totalDrinks > 0 && (
