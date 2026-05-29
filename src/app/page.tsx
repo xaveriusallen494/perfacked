@@ -229,9 +229,9 @@ export default function Home() {
                       <div
                         className={`w-full max-w-[14px] rounded-sm transition-all ${
                           day.isToday
-                            ? 'bg-amber-400'
+                            ? 'bg-gradient-to-t from-amber-600 to-yellow-300'
                             : day.units > 0
-                              ? 'bg-amber-500/40'
+                              ? 'bg-gradient-to-t from-amber-700/40 to-yellow-400/50'
                               : 'bg-zinc-800'
                         }`}
                         style={{ height: `${heightPct}%` }}

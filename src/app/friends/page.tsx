@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Heart, Loader2, UserPlus, Search } from 'lucide-react'
+import { Heart, Loader2, UserPlus, Search, Check, X } from 'lucide-react'
 import { useState, useEffect, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { createClient } from '@/lib/supabase/client'
@@ -43,6 +43,7 @@ export default function FriendsFeed() {
   const [searchQuery, setSearchQuery] = useState('')
   const [friendIds, setFriendIds] = useState<Set<string>>(new Set())
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set())
+  const [incoming, setIncoming] = useState<{ id: string; profile: Profile }[]>([])
 
   const supabase = createClient()
 
@@ -116,11 +117,12 @@ export default function FriendsFeed() {
 
       const { data: friendships } = await supabase
         .from('friendships')
-        .select('requester_id, addressee_id, status')
+        .select('id, requester_id, addressee_id, status, requester:profiles!requester_id(id, username, display_name, avatar_url)')
         .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
 
       const accepted = new Set<string>()
       const pending = new Set<string>()
+      const incomingReqs: { id: string; profile: Profile }[] = []
 
       if (friendships) {
         for (const f of friendships) {
@@ -128,13 +130,18 @@ export default function FriendsFeed() {
           if (f.status === 'accepted') {
             accepted.add(otherId)
           } else if (f.status === 'pending') {
-            pending.add(otherId)
+            if (f.addressee_id === user.id) {
+              incomingReqs.push({ id: f.id, profile: f.requester as unknown as Profile })
+            } else {
+              pending.add(otherId)
+            }
           }
         }
       }
 
       setFriendIds(accepted)
       setPendingRequests(pending)
+      setIncoming(incomingReqs)
       await fetchFeed(user.id, accepted)
       setLoading(false)
     }
@@ -210,6 +217,37 @@ export default function FriendsFeed() {
     toast.success('Friend request sent!')
   }
 
+  const acceptRequest = async (friendshipId: string, requesterId: string) => {
+    const { error } = await supabase
+      .from('friendships')
+      .update({ status: 'accepted', updated_at: new Date().toISOString() })
+      .eq('id', friendshipId)
+
+    if (error) {
+      toast.error('Failed to accept request')
+      return
+    }
+
+    setIncoming(prev => prev.filter(r => r.id !== friendshipId))
+    const next = new Set(friendIds)
+    next.add(requesterId)
+    setFriendIds(next)
+    toast.success('Friend added!')
+    if (userId) fetchFeed(userId, next)
+  }
+
+  const declineRequest = async (friendshipId: string) => {
+    const { error } = await supabase.from('friendships').delete().eq('id', friendshipId)
+
+    if (error) {
+      toast.error('Failed to decline request')
+      return
+    }
+
+    setIncoming(prev => prev.filter(r => r.id !== friendshipId))
+    toast.success('Request declined')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -232,6 +270,52 @@ export default function FriendsFeed() {
         <h1 className="text-2xl font-bold text-zinc-50">Friends</h1>
         <p className="text-zinc-500 text-sm mt-0.5">See what others are drinking</p>
       </header>
+
+      {incoming.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
+            Requests <span className="text-zinc-600">({incoming.length})</span>
+          </h2>
+          <div className="flex flex-col gap-2">
+            {incoming.map((req) => (
+              <motion.div
+                key={req.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="flex items-center gap-3 p-3 rounded-xl bg-zinc-900 border border-zinc-800/60"
+              >
+                <Avatar className="w-9 h-9 border border-zinc-800">
+                  <AvatarImage src={req.profile?.avatar_url || undefined} />
+                  <AvatarFallback className="bg-zinc-800 text-zinc-400 text-xs">
+                    {(req.profile?.display_name || req.profile?.username || '?').charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-200 truncate">
+                    {req.profile?.display_name || req.profile?.username || 'Unknown'}
+                  </p>
+                  <p className="text-xs text-zinc-600">wants to be friends</p>
+                </div>
+                <button
+                  onClick={() => acceptRequest(req.id, req.profile.id)}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500 text-zinc-950 active:scale-95 transition-transform"
+                  aria-label="Accept"
+                >
+                  <Check className="w-4 h-4" strokeWidth={3} />
+                </button>
+                <button
+                  onClick={() => declineRequest(req.id)}
+                  className="flex items-center justify-center w-9 h-9 rounded-lg bg-zinc-800 text-zinc-400 active:scale-95 transition-transform"
+                  aria-label="Decline"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />

@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2, LogOut, Save, Calendar } from 'lucide-react'
+import { Loader2, LogOut, Save, Calendar, Camera } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { v4 as uuidv4 } from 'uuid'
 import { toast } from 'sonner'
 import { DrinkIcon } from '@/components/DrinkIcon'
 
@@ -34,13 +35,17 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
   const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [email, setEmail] = useState('')
   const [totalDrinks, setTotalDrinks] = useState(0)
   const [totalUnits, setTotalUnits] = useState(0)
   const [topDrinks, setTopDrinks] = useState<TopDrink[]>([])
   const [friendCount, setFriendCount] = useState(0)
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -61,7 +66,9 @@ export default function ProfilePage() {
       if (profileData) {
         setProfile(profileData)
         setDisplayName(profileData.display_name || '')
+        setUsername(profileData.username || '')
         setBio(profileData.bio || '')
+        setAvatarUrl(profileData.avatar_url || null)
       }
 
       // Total consumption stats
@@ -106,23 +113,73 @@ export default function ProfilePage() {
     init()
   }, [])
 
+  const handleAvatarUpload = async (file: File) => {
+    if (!profile) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be under 5 MB')
+      return
+    }
+
+    setUploading(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'png'
+      const path = `${profile.id}/${uuidv4()}.${ext}`
+      const { error } = await supabase.storage
+        .from('avatars')
+        .upload(path, file, { cacheControl: '3600', upsert: true })
+
+      if (error) {
+        toast.error('Upload failed')
+        return
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      setAvatarUrl(data.publicUrl)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!profile) return
+
+    const trimmedUsername = username.trim()
+    if (trimmedUsername && !/^[a-zA-Z0-9_.]{3,20}$/.test(trimmedUsername)) {
+      toast.error('Username must be 3–20 chars: letters, numbers, _ or .')
+      return
+    }
+
     setSaving(true)
 
     const { error } = await supabase
       .from('profiles')
       .update({
         display_name: displayName.trim() || null,
+        username: trimmedUsername || null,
         bio: bio.trim() || null,
+        avatar_url: avatarUrl,
         updated_at: new Date().toISOString(),
       })
       .eq('id', profile.id)
 
     if (error) {
-      toast.error('Failed to save profile')
+      if (error.code === '23505') {
+        toast.error('That username is already taken')
+      } else {
+        toast.error('Failed to save profile')
+      }
     } else {
-      setProfile(prev => prev ? { ...prev, display_name: displayName.trim(), bio: bio.trim() } : prev)
+      setProfile(prev => prev ? {
+        ...prev,
+        display_name: displayName.trim() || null,
+        username: trimmedUsername || null,
+        bio: bio.trim() || null,
+        avatar_url: avatarUrl,
+      } : prev)
       setEditing(false)
       toast.success('Profile updated')
     }
@@ -231,10 +288,51 @@ export default function ProfilePage() {
       {/* Edit form */}
       {editing ? (
         <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
           className="rounded-xl bg-zinc-900 border border-zinc-800/60 p-4 space-y-4"
         >
+          <div className="flex flex-col items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) handleAvatarUpload(file)
+                e.target.value = ''
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="relative group rounded-full"
+            >
+              <Avatar className="w-20 h-20 border-2 border-zinc-800">
+                <AvatarImage src={avatarUrl || undefined} />
+                <AvatarFallback className="bg-zinc-800 text-zinc-400 text-2xl">
+                  {(displayName || username || '?').charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                {uploading ? (
+                  <Loader2 className="w-5 h-5 text-zinc-100 animate-spin" />
+                ) : (
+                  <Camera className="w-5 h-5 text-zinc-100" />
+                )}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              {uploading ? 'Uploading…' : 'Change photo'}
+            </button>
+          </div>
           <div className="space-y-2">
             <Label className="text-zinc-400 text-sm">Display name</Label>
             <Input
@@ -243,6 +341,21 @@ export default function ProfilePage() {
               placeholder="Your name"
               className="h-10 bg-zinc-950 border-zinc-800/60 text-zinc-100 rounded-xl"
             />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-zinc-400 text-sm">Username</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">@</span>
+              <Input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="username"
+                maxLength={20}
+                autoCapitalize="none"
+                autoCorrect="off"
+                className="h-10 pl-7 bg-zinc-950 border-zinc-800/60 text-zinc-100 rounded-xl"
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-zinc-400 text-sm">Bio</Label>
@@ -267,7 +380,9 @@ export default function ProfilePage() {
               onClick={() => {
                 setEditing(false)
                 setDisplayName(profile.display_name || '')
+                setUsername(profile.username || '')
                 setBio(profile.bio || '')
+                setAvatarUrl(profile.avatar_url || null)
               }}
               variant="outline"
               className="h-10 rounded-xl border-zinc-800/60 text-zinc-400"
